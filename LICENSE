@@ -1,0 +1,76 @@
+本仓库包含两类内容，适用条款不同。
+
+================================================================
+一、本项目的原创代码
+================================================================
+
+以下文件由本项目作者编写，采用 MIT 许可证：
+
+  host/                     PC 上位机全部代码
+  web/index.html            浏览器界面
+  simulator/car_receiver.py 执行端示例
+  docs/                     设计文档
+  images/                   架构图与封面
+  README.md
+  论坛帖正文.md
+
+MIT License
+
+Copyright (c) 2026 dr-gc
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================
+二、基于厂商示例修改的板端代码
+================================================================
+
+以下文件源自富瀚微电子 MC632X SDK V3.4.0 的示例代码，本项目在其基础上
+做了修改，原有版权声明保留：
+
+  firmware/sample_nna_obj_detect.c
+  firmware/nna_config.c
+  firmware/enc_config.c
+  firmware/Sensor1_Kconfig
+  firmware/media_demo.config
+
+这些文件不适用上述 MIT 许可证，也未由本项目作者重新授权。它们的使用、
+复制与再分发应遵守富瀚微电子提供的原始 SDK 许可条款。
+
+================================================================
+三、未包含在本仓库中的内容
+================================================================
+
+以下内容版权归富瀚微电子所有，本仓库不包含：
+
+  · 完整 MC632X SDK
+  · 交叉编译工具链（arm-fullhanv2-eabi-b3）
+  · 人形检测模型 30055（persondet.nbg）
+  · 厂商静态库（libisp.a、libvpu.a、libvou.a、libnna.a 等）
+  · CV2005 sensor 参数与驱动库
+
+如需构建板端固件，请自行向富瀚微电子取得合法可用的 SDK。
+
+================================================================
+四、第三方开源组件
+================================================================
+
+  RT-Thread            Apache-2.0   https://www.rt-thread.org
+  MediaPipe            Apache-2.0   https://github.com/google-ai-edge/mediapipe
+  手势 MLP 模型          Apache-2.0   https://github.com/Kazuhito00/hand-gesture-recognition-using-mediapipe
+  Flask / Flask-Sock   BSD-3-Clause https://palletsprojects.com
