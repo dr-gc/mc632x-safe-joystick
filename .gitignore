@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+
+# 模型与数据
+*.nbg
+*.onnx
+*.ckpt
+*.pth
+
+# 日志与临时
+*.log
+*.bak
+/tmp/
+.hermes/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 构建产物
+build/
+dist/
+*.o
+*.a
+*.bin
+*.elf
+out/
+
+# 截图临时文件
+*.tmp
+screenshot_*.png
