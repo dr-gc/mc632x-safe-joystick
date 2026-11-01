@@ -11,10 +11,51 @@ firmware/ 下的文件源自厂商示例代码，本项目在其基础上做了�
 | 文件 | 原始路径 | 修改内容 |
 |---|---|---|
 | sample_nna_obj_detect.c | app/media_demo/sample_demo/nna_app/src/ | 人形检测主循环、模型内联、摇杆状态机、串口输出格式 |
+| ctrl_state_machine.c | 新增文件 | 板端安全状态机：9001 收 PC 摇杆数据，四态判定，1 秒看门狗 |
+| cmd_output_server.c | 新增文件 | 9002 控制输出服务：向执行端推指令，0.5 秒心跳，最多 4 客户端 |
+| sample_common_demo.c | app/media_demo/sample_demo/ | 启动流程接入 ctrl_sm_start() |
+| media.mk | app/media_demo/script/rtt/chip/MC632X/ | 构建脚本新增两个 C 文件的编译 |
 | nna_config.c | app/media_demo/sample_common/MC632X/dsp/nna/src/ | 新增 mem: 前缀与 model_from_mem 标志，静态模型跳过 free |
 | enc_config.c | app/media_demo/sample_common/MC632X/dsp/enc/src/ | GOP 由 50 改为 15，降低 RTSP 首帧延迟 |
 | Sensor1_Kconfig | app/media_demo/script/ | 新增 CV2005 选项（原厂只给 Sensor0 配了这类 sensor）|
 | media_demo.config | app/media_demo/ | 完整 menuconfig 配置，含双摄与屏显 |
+
+## 板端控制链
+
+```
+PC 上位机 --(TCP 9001, dir/mag/estop)--> ctrl_state_machine.c
+                                              |
+                                         四态状态机
+                                         急停锁存
+                                         1 秒看门狗
+                                              |
+                                              v
+                                    cmd_output_server.c (TCP 9002)
+                                              |
+                                              v
+                                        执行端 / 小车
+```
+
+状态机四态：
+
+| 状态 | 触发条件 | 输出 |
+|---|---|---|
+| STANDBY | 未收到数据 / 超时 / 手不在工作区 | stop |
+| READY | 收到数据但幅度不足 | stop |
+| ACTIVE | 幅度达标，方向有效 | 方向指令 |
+| EMERGENCY | PC 报急停 | stop（锁存，回中解除）|
+
+串口日志格式：
+
+```
+[SM] ctrl server listening on 9001 (min_speed=60 timeout=1000ms)
+[SM] PC connected: 192.168.215.50:39410
+[SM] READY -> ACTIVE (FWD mag=500 -> w)
+[CMD] w
+[SM] EMERGENCY (estop from PC)
+[CMD] stop
+[SM] TIMEOUT (1998ms) -> STANDBY
+```
 
 ## 关键配置
 
