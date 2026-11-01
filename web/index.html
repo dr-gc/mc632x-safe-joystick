@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAFE JOYSTICK · 安全虚拟摇杆</title>
+<style>
+:root{
+  --bg:#06080c;
+  --bg2:#0a0e14;
+  --panel:rgba(14,19,26,.72);
+  --line:rgba(0,229,255,.14);
+  --line-soft:rgba(255,255,255,.055);
+  --cy:#00e5ff;
+  --gr:#00ff9d;
+  --am:#ffb300;
+  --rd:#ff2d55;
+  --tx:#e8f4f8;
+  --dim:#5a6b7a;
+  --dim2:#3a4754;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0,229,255,.07), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(0,255,157,.05), transparent 60%),
+    var(--bg);
+  color:var(--tx);
+  font-family:"JetBrains Mono","SF Mono","Noto Sans CJK SC",Consolas,monospace;
+  overflow:hidden;
+  height:100vh;
+}
+/* 扫描线 */
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;
+  background:repeating-linear-gradient(0deg,
+    rgba(0,0,0,.16) 0px, rgba(0,0,0,.16) 1px, transparent 1px, transparent 3px);
+  opacity:.42;
+}
+/* 网格底纹 */
+.grid-bg{
+  position:fixed;inset:0;pointer-events:none;opacity:.16;z-index:0;
+  background-image:
+    linear-gradient(rgba(0,229,255,.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,.09) 1px, transparent 1px);
+  background-size:48px 48px;
+  mask-image:radial-gradient(ellipse 70% 70% at 50% 40%, #000 40%, transparent 100%);
+}
+
+/* ══════════ 布局 ══════════ */
+.app{position:relative;z-index:1;height:100vh;display:flex;flex-direction:column}
+
+/* 顶栏 */
+.topbar{
+  height:56px;flex:0 0 56px;display:flex;align-items:center;
+  padding:0 22px;gap:26px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg, rgba(0,229,255,.045), transparent);
+  backdrop-filter:blur(10px);
+}
+.brand{display:flex;align-items:center;gap:11px}
+.brand .logo{
+  width:26px;height:26px;position:relative;
+  border:1.5px solid var(--cy);border-radius:5px;
+  box-shadow:0 0 12px rgba(0,229,255,.5), inset 0 0 8px rgba(0,229,255,.18);
+  display:grid;place-items:center;
+}
+.brand .logo::before{
+  content:"";width:9px;height:9px;background:var(--cy);border-radius:50%;
+  box-shadow:0 0 9px var(--cy);animation:pl 2s infinite;
+}
+@keyframes pl{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.72)}}
+.brand h1{font-size:14.5px;font-weight:700;letter-spacing:2.4px}
+.brand h1 span{color:var(--cy)}
+.brand .ver{font-size:9px;color:var(--dim2);letter-spacing:1.2px;margin-left:2px}
+
+.tb-item{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--dim);letter-spacing:.9px}
+.tb-item b{color:var(--gr);font-weight:600}
+.tb-dot{width:6px;height:6px;border-radius:50%;background:var(--gr);box-shadow:0 0 8px var(--gr);animation:pl 1.7s infinite}
+.spacer{flex:1}
+.clock{font-size:12.5px;color:var(--cy);letter-spacing:1.6px;font-variant-numeric:tabular-nums;
+       text-shadow:0 0 10px rgba(0,229,255,.45)}
+.rec{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--rd);letter-spacing:1.4px}
+.rec i{width:7px;height:7px;border-radius:50%;background:var(--rd);box-shadow:0 0 9px var(--rd);
+       animation:pl 1.1s infinite}
+
+/* 主体 */
+.main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:10px;padding:10px;min-height:0}
+.panel.slim{max-width:250px}
+
+/* ══════════ 左：视频 ══════════ */
+.stage{
+  position:relative;border:1px solid var(--line);border-radius:10px;
+  overflow:hidden;background:#000;
+  box-shadow:0 0 34px rgba(0,229,255,.07), inset 0 0 60px rgba(0,229,255,.025);
+}
+.stage img{width:100%;height:100%;object-fit:contain;display:block;background:#000}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+/* 四角装饰 */
+.corner{position:absolute;width:22px;height:22px;border-color:var(--cy);opacity:.75;pointer-events:none;z-index:5}
+.corner.tl{top:9px;left:9px;border-top:2px solid;border-left:2px solid;border-radius:4px 0 0 0}
+.corner.tr{top:9px;right:9px;border-top:2px solid;border-right:2px solid;border-radius:0 4px 0 0}
+.corner.bl{bottom:9px;left:9px;border-bottom:2px solid;border-left:2px solid;border-radius:0 0 0 4px}
+.corner.br{bottom:9px;right:9px;border-bottom:2px solid;border-right:2px solid;border-radius:0 0 4px 0}
+
+/* 视频左上角标签 */
+.vtag{
+  position:absolute;top:16px;left:16px;z-index:6;
+  display:flex;align-items:center;gap:8px;
+  padding:6px 12px;border-radius:6px;
+  background:rgba(6,10,15,.82);border:1px solid var(--line);
+  font-size:10.5px;letter-spacing:1.3px;color:var(--cy);
+  backdrop-filter:blur(8px);
+}
+.vtag i{width:6px;height:6px;border-radius:50%;background:var(--gr);box-shadow:0 0 8px var(--gr);animation:pl 1.7s infinite}
+
+/* 画中画小窗 */
+.pip{
+  position:absolute;right:16px;top:16px;z-index:7;
+  width:270px;border-radius:8px;overflow:hidden;
+  border:1.5px solid rgba(0,229,255,.34);
+  box-shadow:0 6px 28px rgba(0,0,0,.72), 0 0 18px rgba(0,229,255,.13);
+  background:#000;cursor:pointer;
+  transition:border-color .22s, box-shadow .22s, transform .22s;
+}
+.pip:hover{border-color:rgba(0,255,157,.72);box-shadow:0 6px 32px rgba(0,0,0,.8),0 0 26px rgba(0,255,157,.28);transform:translateY(-1px)}
+.pip img{width:100%;display:block;aspect-ratio:16/9;object-fit:cover}
+.pip.off{border-color:rgba(255,45,85,.4)}
+.pip.off::after{
+  content:"CAM-02 OFFLINE";position:absolute;inset:0;
+  display:grid;place-items:center;background:rgba(6,10,15,.9);
+  font-size:10px;letter-spacing:1.5px;color:#ff2d55;
+}
+.pip-tag{
+  position:absolute;top:7px;left:7px;display:flex;align-items:center;gap:5px;
+  padding:3px 8px;border-radius:4px;background:rgba(6,10,15,.82);
+  font-size:8.5px;letter-spacing:1.1px;color:var(--cy);border:1px solid rgba(0,229,255,.22);
+}
+.pip-tag i{width:4.5px;height:4.5px;border-radius:50%;background:var(--gr);box-shadow:0 0 6px var(--gr);animation:pl 1.7s infinite}
+.pip-hint{
+  position:absolute;bottom:0;left:0;right:0;padding:3px 0;text-align:center;
+  font-size:7.5px;letter-spacing:1.2px;color:#7a8a99;
+  background:linear-gradient(transparent, rgba(6,10,15,.92));
+  opacity:0;transition:opacity .2s;
+}
+.pip:hover .pip-hint{opacity:1}
+
+
+/* ══════════ 双画面舞台 ══════════ */
+.stage2{
+  position:relative;flex:1;min-height:0;display:flex;
+  border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  background:#000;
+  box-shadow:0 0 34px rgba(0,229,255,.07), inset 0 0 60px rgba(0,229,255,.025);
+}
+.cam{position:relative;flex:1;min-width:0;overflow:hidden}
+.cam img{width:100%;height:100%;object-fit:contain;display:block;background:#000;
+        transform:scaleX(-1)}   /* 左右镜像：像照镜子 */
+.cam .ovl{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+.cam-tag{
+  position:absolute;top:14px;left:14px;z-index:4;
+  display:flex;align-items:center;gap:7px;
+  padding:5px 11px;border-radius:5px;
+  background:rgba(6,10,15,.8);border:1px solid rgba(0,229,255,.24);
+  font-size:9.5px;letter-spacing:1.1px;color:var(--cy);
+  backdrop-filter:blur(8px);
+}
+.cam-tag.alt{left:auto;right:14px;border-color:rgba(0,255,157,.26);color:var(--gr)}
+.cam-tag i{width:5px;height:5px;border-radius:50%;background:var(--gr);
+           box-shadow:0 0 7px var(--gr);animation:pl 1.8s infinite}
+
+/* 中央分割 */
+.divider{
+  position:absolute;left:50%;top:0;bottom:0;width:1px;z-index:3;
+  background:linear-gradient(180deg,transparent,rgba(0,229,255,.5) 20%,
+             rgba(0,229,255,.5) 80%,transparent);
+  box-shadow:0 0 10px rgba(0,229,255,.4);
+  pointer-events:none;
+}
+
+/* ══════════ 摇杆浮层 ══════════ */
+.joy-overlay{
+  position:absolute;bottom:74px;z-index:8;
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:9px 10px 7px;border-radius:10px;
+  background:rgba(6,10,15,.52);
+  border:1px solid rgba(0,229,255,.24);
+  backdrop-filter:blur(14px);
+  box-shadow:0 6px 30px rgba(0,0,0,.6);
+  transition:border-color .25s, box-shadow .25s, background .25s;
+  width:auto;height:auto;
+}
+/* 两个摇杆都放在左画面（CAM-0）内，分别对应左/右工作区 */
+/* 单摇杆：定位在右画面（手势识别画面）中央偏下 */
+.joy-overlay.single{
+  left:auto;right:calc(25% - 102px);
+}
+.joy-overlay.act{border-color:rgba(0,255,157,.6);
+                 box-shadow:0 6px 34px rgba(0,255,157,.2);background:rgba(6,20,15,.7)}
+.joy-overlay.err{border-color:rgba(255,45,85,.65);
+                 box-shadow:0 6px 34px rgba(255,45,85,.25);background:rgba(20,6,10,.72)}
+.joy-overlay.cal{border-color:rgba(255,179,0,.7);
+                 box-shadow:0 6px 34px rgba(255,179,0,.25);
+                 animation:calp 1.1s infinite}
+
+.joy-cap{display:flex;align-items:center;gap:9px;width:100%;justify-content:center}
+.joy-cap span{font-size:15px;font-weight:800;color:var(--cy);letter-spacing:1.5px;
+              text-shadow:0 0 12px rgba(0,229,255,.6)}
+.joy-cap b{font-size:8.5px;color:var(--dim);letter-spacing:1px;font-weight:500}
+#joyL,#joyR{display:block;width:200px!important;height:200px!important;flex:0 0 auto;filter:drop-shadow(0 0 12px rgba(0,229,255,.14))}
+.joy-xy{font-size:9.5px;color:var(--dim);font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.joy-xy span{color:var(--cy);font-weight:600}
+
+.joy-overlay .cbtn{
+  width:100%;padding:4px 0;border-radius:5px;cursor:pointer;
+  background:rgba(0,229,255,.07);border:1px solid rgba(0,229,255,.2);
+  color:var(--cy);font-size:8.5px;letter-spacing:1px;
+  font-family:inherit;transition:.18s;
+}
+.joy-overlay .cbtn:hover{background:rgba(0,229,255,.18);border-color:rgba(0,229,255,.5)}
+.joy-overlay .cbtn.on{background:rgba(255,179,0,.2);border-color:rgba(255,179,0,.6);color:var(--am)}
+
+/* 底部指标（悬浮） */
+.stage2 .metrics{
+  position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:6;
+  display:flex;gap:8px;
+}
+.stage2 .metric{
+  min-width:96px;padding:7px 12px;border-radius:6px;
+  background:rgba(6,10,15,.78);border:1px solid var(--line-soft);
+  backdrop-filter:blur(9px);text-align:center;
+}
+.stage2 .metric .l{font-size:8px;letter-spacing:1.2px;color:#4d5c69}
+.stage2 .metric .v{font-size:16px;font-weight:700;color:var(--cy);letter-spacing:.5px;
+                   font-variant-numeric:tabular-nums;text-shadow:0 0 11px rgba(0,229,255,.42);line-height:1.2}
+.stage2 .metric .v small{font-size:9px;color:var(--dim);font-weight:400;margin-left:1px}
+
+/* 中央校准按钮 */
+.cal-center{
+  position:absolute;left:50%;transform:translateX(-50%);bottom:62px;z-index:7;
+  display:flex;gap:6px;align-items:center;
+}
+.cal-center .calbtn{
+  padding:7px 20px;border-radius:6px;cursor:pointer;
+  background:linear-gradient(180deg,rgba(0,229,255,.16),rgba(0,229,255,.06));
+  border:1px solid rgba(0,229,255,.36);color:var(--cy);
+  font-size:10.5px;letter-spacing:1.2px;font-weight:600;
+  font-family:inherit;backdrop-filter:blur(10px);transition:.2s;
+}
+.cal-center .calbtn:hover{background:linear-gradient(180deg,rgba(0,229,255,.3),rgba(0,229,255,.14));
+                          box-shadow:0 0 20px rgba(0,229,255,.3)}
+.cal-center .calbtn.on{background:linear-gradient(180deg,rgba(255,179,0,.28),rgba(255,179,0,.12));
+                       border-color:rgba(255,179,0,.65);color:var(--am)}
+.cal-center .resetbtn{
+  width:32px;height:32px;border-radius:6px;cursor:pointer;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);
+  color:var(--dim);font-size:13px;font-family:inherit;
+  backdrop-filter:blur(10px);transition:.2s;
+}
+.cal-center .resetbtn:hover{background:rgba(255,45,85,.16);
+                            border-color:rgba(255,45,85,.45);color:var(--rd)}
+
+.calhint{
+  position:absolute;left:50%;transform:translateX(-50%);bottom:44px;z-index:6;
+  font-size:8.5px;color:var(--dim2);letter-spacing:.6px;
+  background:rgba(6,10,15,.6);padding:2px 10px;border-radius:4px;
+  backdrop-filter:blur(6px);transition:.2s;
+}
+.calhint.hot{color:var(--am)}
+
+/* 底部指标 */
+.metrics{
+  position:absolute;left:16px;right:16px;bottom:16px;z-index:6;
+  display:flex;gap:9px;flex-wrap:wrap;
+}
+.metric{
+  flex:1;min-width:104px;
+  padding:9px 13px;border-radius:7px;
+  background:rgba(6,10,15,.8);border:1px solid var(--line-soft);
+  backdrop-filter:blur(9px);
+}
+.metric .l{font-size:8.5px;letter-spacing:1.3px;color:#4d5c69}
+.metric .v{font-size:17px;font-weight:700;color:var(--cy);letter-spacing:.6px;
+           font-variant-numeric:tabular-nums;text-shadow:0 0 12px rgba(0,229,255,.4);line-height:1.25}
+.metric .v small{font-size:9.5px;color:var(--dim);font-weight:400;margin-left:2px}
+
+/* ══════════ 右：面板 ══════════ */
+.panel{
+  display:flex;flex-direction:column;gap:8px;min-height:0;overflow-y:auto;
+  padding-right:2px;
+}
+.panel::-webkit-scrollbar{width:3px}
+.panel::-webkit-scrollbar-thumb{background:rgba(0,229,255,.22);border-radius:2px}
+
+.card{
+  position:relative;
+  background:var(--panel);
+  border:1px solid var(--line-soft);
+  border-radius:9px;
+  padding:10px 13px;
+  backdrop-filter:blur(13px);
+  box-shadow:0 3px 22px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.03);
+  transition:border-color .25s, box-shadow .25s;
+}
+.card::before{
+  content:"";position:absolute;left:0;top:12px;bottom:12px;width:2px;
+  background:linear-gradient(180deg, transparent, var(--cy), transparent);
+  border-radius:2px;opacity:.55;
+}
+.card.act{border-color:rgba(0,255,157,.34);box-shadow:0 3px 26px rgba(0,255,157,.12), inset 0 1px 0 rgba(255,255,255,.03)}
+.card.act::before{background:linear-gradient(180deg, transparent, var(--gr), transparent)}
+.card.warn{border-color:rgba(255,179,0,.34)}
+.card.warn::before{background:linear-gradient(180deg, transparent, var(--am), transparent)}
+.card.err{border-color:rgba(255,45,85,.38)}
+.card.err::before{background:linear-gradient(180deg, transparent, var(--rd), transparent)}
+
+.card-h{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.card-h .ic{width:5px;height:5px;border-radius:1px;background:var(--cy);box-shadow:0 0 7px var(--cy)}
+.card-h .t{font-size:9.5px;color:var(--dim);letter-spacing:1.7px;font-weight:600}
+.card-h .tag{margin-left:auto;font-size:8px;color:var(--dim2);letter-spacing:.9px;
+             padding:2px 6px;border:1px solid var(--line-soft);border-radius:3px}
+
+/* 手势大字 */
+.gesture{font-size:29px;font-weight:800;letter-spacing:-.5px;line-height:1.12;
+         transition:color .2s, text-shadow .2s}
+.gesture.on{color:var(--gr);text-shadow:0 0 22px rgba(0,255,157,.5)}
+.gesture.off{color:#25303a}
+.gesture.stop{color:var(--rd);text-shadow:0 0 22px rgba(255,45,85,.5)}
+.gesture-sub{font-size:9.5px;color:var(--dim);margin-top:5px;letter-spacing:.9px}
+
+/* KV 行 */
+.kv{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:10.5px}
+.kv+.kv{border-top:1px solid rgba(255,255,255,.035)}
+.kv .k{color:var(--dim);letter-spacing:.7px}
+.kv .v{font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.v.ok{color:var(--gr)} .v.warn{color:var(--am)} .v.err{color:var(--rd)} .v.cy{color:var(--cy)}
+
+/* 摇杆 */
+.joy-wrap{display:flex;flex-direction:column;align-items:center;gap:9px}
+#joy{display:block;filter:drop-shadow(0 0 16px rgba(0,229,255,.13))}
+.joy-bar{display:flex;gap:8px;width:100%}
+.joy-bar .b{
+  flex:1;text-align:center;padding:5px 0;border-radius:5px;
+  background:rgba(0,229,255,.045);border:1px solid var(--line-soft);
+  font-size:9.5px;color:var(--dim);letter-spacing:.8px;
+}
+.joy-bar .b b{display:block;font-size:13px;color:var(--cy);margin-top:2px;
+              font-variant-numeric:tabular-nums;text-shadow:0 0 9px rgba(0,229,255,.4)}
+
+/* 双摇杆 */
+.dual{display:flex;gap:6px;justify-content:space-between}
+.jside{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
+       padding:7px 4px;border-radius:7px;background:rgba(0,229,255,.028);
+       border:1px solid rgba(255,255,255,.05);transition:.25s}
+.jside.act{border-color:rgba(0,255,157,.4);background:rgba(0,255,157,.05);
+           box-shadow:0 0 16px rgba(0,255,157,.12)}
+.jside.err{border-color:rgba(255,45,85,.45);background:rgba(255,45,85,.06)}
+.jside.cal{border-color:rgba(255,179,0,.5);background:rgba(255,179,0,.06);
+           animation:calp 1.1s infinite}
+@keyframes calp{0%,100%{box-shadow:0 0 8px rgba(255,179,0,.2)}50%{box-shadow:0 0 22px rgba(255,179,0,.5)}}
+
+.jhd{display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 3px}
+.jname{font-size:12px;font-weight:800;color:var(--cy);letter-spacing:1px;
+       text-shadow:0 0 10px rgba(0,229,255,.5)}
+.jst{font-size:8px;letter-spacing:.9px;color:var(--dim)}
+.jxy{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums;letter-spacing:.4px}
+.jxy span{color:var(--cy);font-weight:600}
+#joyL,#joyR{display:block;width:200px!important;height:200px!important;flex:0 0 auto;filter:drop-shadow(0 0 10px rgba(0,229,255,.1))}
+
+.cbtn{width:100%;margin-top:2px;padding:4px 0;border-radius:5px;cursor:pointer;
+      background:rgba(0,229,255,.07);border:1px solid rgba(0,229,255,.22);
+      color:var(--cy);font-size:8.5px;letter-spacing:1px;
+      font-family:inherit;transition:.18s}
+.cbtn:hover{background:rgba(0,229,255,.16);border-color:rgba(0,229,255,.5)}
+.cbtn.on{background:rgba(255,179,0,.16);border-color:rgba(255,179,0,.55);color:var(--am)}
+
+.calbar{display:flex;gap:6px;margin-top:8px}
+.calbtn{flex:1;padding:8px 0;border-radius:6px;cursor:pointer;
+        background:linear-gradient(180deg,rgba(0,229,255,.14),rgba(0,229,255,.06));
+        border:1px solid rgba(0,229,255,.34);color:var(--cy);
+        font-size:10.5px;letter-spacing:1.2px;font-weight:600;
+        font-family:inherit;transition:.2s}
+.calbtn:hover{background:linear-gradient(180deg,rgba(0,229,255,.26),rgba(0,229,255,.12));
+              box-shadow:0 0 18px rgba(0,229,255,.25)}
+.calbtn.on{background:linear-gradient(180deg,rgba(255,179,0,.24),rgba(255,179,0,.1));
+           border-color:rgba(255,179,0,.6);color:var(--am)}
+.resetbtn{width:38px;border-radius:6px;cursor:pointer;
+          background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);
+          color:var(--dim);font-size:13px;font-family:inherit;transition:.2s}
+.resetbtn:hover{background:rgba(255,45,85,.14);border-color:rgba(255,45,85,.4);color:var(--rd)}
+
+.calhint{font-size:8.5px;color:var(--dim2);margin-top:6px;letter-spacing:.6px;
+         line-height:1.5;text-align:center;transition:.2s}
+.calhint.hot{color:var(--am)}
+
+.gesture-big{
+  font-size:22px;font-weight:800;letter-spacing:-.3px;line-height:1.2;
+  margin-bottom:7px;transition:color .2s, text-shadow .2s;
+}
+.gesture-big.on{color:var(--gr);text-shadow:0 0 18px rgba(0,255,157,.5)}
+.gesture-big.off{color:#25303a}
+.gesture-big.stop{color:var(--rd);text-shadow:0 0 18px rgba(255,45,85,.5)}
+.gesture-big.unk{color:var(--am)}
+
+/* 状态条 */
+.status{display:flex;align-items:center;gap:10px;padding:10px 13px;border-radius:7px;
+        font-size:13.5px;font-weight:700;letter-spacing:.7px;
+        background:rgba(255,255,255,.022);border:1px solid var(--line-soft);transition:.2s}
+.status .led{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.status.ok{background:rgba(0,255,157,.07);border-color:rgba(0,255,157,.28);color:var(--gr)}
+.status.ok .led{background:var(--gr);box-shadow:0 0 12px var(--gr);animation:pl 1.5s infinite}
+.status.warn{background:rgba(255,179,0,.07);border-color:rgba(255,179,0,.28);color:var(--am)}
+.status.warn .led{background:var(--am);box-shadow:0 0 12px var(--am)}
+.status.err{background:rgba(255,45,85,.08);border-color:rgba(255,45,85,.3);color:var(--rd)}
+.status.err .led{background:var(--rd);box-shadow:0 0 12px var(--rd);animation:pl .85s infinite}
+.status.idle{color:var(--dim)}
+.status.idle .led{background:#39454f}
+.reason{font-size:9.5px;color:var(--dim);margin-top:6px;letter-spacing:.7px;line-height:1.5}
+
+/* 日志窗口 */
+.logbox{
+  height:88px;overflow:hidden;position:relative;
+  font-size:9.5px;line-height:1.62;letter-spacing:.35px;
+  color:#4e6070;font-family:"JetBrains Mono",Consolas,monospace;
+}
+.logbox::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:36px;
+  background:linear-gradient(transparent, rgba(14,19,26,.97));
+  pointer-events:none;
+}
+.logline{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.logline .ts{color:#2f3b46}
+.logline .ok{color:var(--gr)}
+.logline .cy{color:var(--cy)}
+.logline .wn{color:var(--am)}
+.logline .er{color:var(--rd)}
+
+/* 雷达 */
+.radar-wrap{display:flex;gap:11px;align-items:center}
+#radar{flex-shrink:0;filter:drop-shadow(0 0 10px rgba(0,229,255,.16))}
+.radar-info{flex:1;font-size:9px;color:var(--dim);line-height:1.8;letter-spacing:.5px}
+.radar-info b{color:var(--cy);font-weight:600}
+
+/* 频谱 */
+#spec{display:block;width:100%;height:38px;border-radius:4px;background:rgba(0,229,255,.022)}
+
+/* 底部状态带 */
+.footbar{
+  height:26px;flex:0 0 26px;display:flex;align-items:center;gap:22px;
+  padding:0 22px;border-top:1px solid var(--line-soft);
+  font-size:9px;color:var(--dim2);letter-spacing:1.1px;
+  background:rgba(0,229,255,.018);overflow:hidden;white-space:nowrap;
+}
+.footbar .hi{color:var(--dim)}
+.footbar .blink{animation:pl 1.4s infinite;color:var(--cy)}
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+
+<div class="app">
+  <!-- 顶栏 -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo"></div>
+      <h1>SAFE<span>·</span>JOYSTICK</h1>
+      <span class="ver">v2.0</span>
+    </div>
+    <div class="tb-item"><span class="tb-dot"></span>SYSTEM <b>ONLINE</b></div>
+    <div class="tb-item">NPU <b id="tb-npu">5.0</b> FPS</div>
+    <div class="tb-item">LINK <b id="tb-link">--</b></div>
+    <div class="spacer"></div>
+    <div class="rec"><i></i>REC</div>
+    <div class="clock" id="clock">00:00:00</div>
+  </div>
+
+  <!-- 主体 -->
+  <div class="main">
+    <!-- 双画面舞台 -->
+    <div class="stage2">
+      <!-- CAM-0 -->
+      <div class="cam" id="cam1">
+        <img id="stream1" src="/video1" alt="">
+        <canvas id="ov1" class="ovl"></canvas>
+        <div class="cam-tag alt"><i></i>CAM-2 · 手势识别</div>
+      </div>
+
+      <div class="cam" id="cam0">
+        <img id="stream" src="/video" alt="">
+        <canvas id="ov0" class="ovl"></canvas>
+        <div class="cam-tag"><i></i>CAM-1 · 人体识别</div>
+      </div>
+      <!-- CAM-1 -->
+      <!-- 中央分割线 -->
+      <div class="divider"></div>
+
+      <!-- 单摇杆（叠在右画面 = 手势识别画面） -->
+      <div class="joy-overlay single" id="joyR-wrap">
+        <div class="joy-cap"><span>JOY</span><b id="st-r">STOP</b></div>
+        <canvas id="joyR" width="200" height="200"></canvas>
+        <div class="joy-xy"><span id="rx">+0</span> / <span id="ry">+0</span></div>
+        <button class="cbtn" id="cal-r">校准零点</button>
+      </div>
+
+      <!-- 底部指标 -->
+      <div class="metrics">
+        <div class="metric"><div class="l">CAPTURE</div><div class="v" id="m-cap">0<small>fps</small></div></div>
+        <div class="metric"><div class="l">HAND AI</div><div class="v" id="m-hand">0<small>fps</small></div></div>
+        <div class="metric"><div class="l">NPU</div><div class="v" id="m-npu">0<small>fps</small></div></div>
+        <div class="metric"><div class="l">LATENCY</div><div class="v" id="m-lat">--<small>ms</small></div></div>
+      </div>
+
+      <!-- 中央校准按钮 -->
+      <div class="cal-center">
+        <button class="calbtn" id="cal-both">◉ 校准摇杆</button>
+        <button class="resetbtn" id="cal-reset">↺</button>
+      </div>
+      <div class="calhint" id="calhint">点击校准后连续握拳 3 次，平均位置即零点</div>
+    </div>
+
+    <!-- 右侧面板 -->
+    <div class="panel slim">
+        <!-- 人形检测 -->
+        <div class="card" id="c-person">
+          <div class="card-h"><span class="ic"></span><span class="t">PERSON DET / 人形</span>
+            <span class="tag">NPU</span></div>
+          <div class="kv"><span class="k">状态</span><span class="v" id="v-find">--</span></div>
+          <div class="kv"><span class="k">目标</span><span class="v" id="v-num">--</span></div>
+          <div class="kv"><span class="k">置信度</span><span class="v" id="v-conf">--</span></div>
+          <div class="kv"><span class="k">UART</span><span class="v" id="v-link">--</span></div>
+        </div>
+
+        <!-- 手势识别 -->
+        <div class="card" id="c-gesture">
+          <div class="card-h"><span class="ic"></span><span class="t">GESTURE / 手势</span>
+            <span class="tag">CV</span></div>
+          <div class="gesture-big" id="gesture-name">STANDBY</div>
+          <div class="kv"><span class="k">手部数量</span><span class="v" id="g-hands">0</span></div>
+          <div class="kv"><span class="k">左右</span><span class="v" id="g-hand">--</span></div>
+          <div class="kv"><span class="k">检测帧率</span><span class="v" id="g-fps">--</span></div>
+        </div>
+
+        <!-- 安全状态 -->
+        <div class="card" id="c-safe">
+          <div class="card-h"><span class="ic"></span><span class="t">SAFETY / 安全</span>
+            <span class="tag">FSM</span></div>
+          <div class="status idle" id="status"><span class="led"></span><span id="status-txt">待机</span></div>
+          <div class="reason" id="reason">等待手部进入工作区</div>
+        </div>
+
+        <!-- 系统装饰 -->
+        <div class="card" style="flex:1;min-height:120px;display:flex;flex-direction:column">
+          <div class="card-h"><span class="ic"></span><span class="t">SYSTEM LOG</span>
+            <span class="tag" id="lograte">0/s</span></div>
+          <div class="logbox" id="logbox"></div>
+        </div>
+      </div>
+  </div>
+
+  <!-- 底部状态带 -->
+  <div class="footbar">
+    <span class="hi">◈</span>
+    <span id="f1">UART0 115200 8N1</span>
+    <span id="f2">CH0 H264 1280×720</span>
+    <span id="f3">JOY ZONE X≥0.50</span>
+    <span class="blink" id="fdots">▮▮▮</span>
+    <span id="f4">FPS 5.0</span>
+    <span id="f5">UPTIME <b id="uptime">00:00:00</b></span>
+  </div>
+</div>
+
+<script>
+/* ═══════════ 常量 ═══════════ */
+const G_NAME = {OPEN_PALM:"张开手掌",FIST:"握拳",OK:"OK 手势",
+                ONE:"1",TWO:"2",THREE:"3",HORNS:"6",NONE:"STANDBY"};
+const D_NAME = {FWD:"前进",BACK:"后退",LEFT:"左转",RIGHT:"右转",STOP:"停止",ESTOP:"急停"};
+
+const img = document.getElementById('stream');
+
+let S = null;               // 后端状态
+let t0 = Date.now();
+let latHist = [];
+
+/* ═══════════ 时钟 ═══════════ */
+function pad(n){return String(n).padStart(2,'0')}
+setInterval(()=>{
+  const d = new Date();
+  document.getElementById('clock').textContent =
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const up = Math.floor((Date.now()-t0)/1000);
+  document.getElementById('uptime').textContent =
+    `${pad(Math.floor(up/3600))}:${pad(Math.floor(up/60)%60)}:${pad(up%60)}`;
+  // 底部点闪烁
+  const n = Math.floor(Date.now()/380)%4;
+  document.getElementById('fdots').textContent = '▮'.repeat(n) + '▯'.repeat(3-n);
+}, 250);
+
+/* ═══════════ 双画面覆盖层 ═══════════ */
+const LM_CONN=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],
+  [10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+
+const ov0 = document.getElementById('ov0');
+const ov1 = document.getElementById('ov1');
+const c0 = ov0 ? ov0.getContext('2d') : null;
+const c1 = ov1 ? ov1.getContext('2d') : null;
+
+/** 画布尺寸 = 容器尺寸；同时返回图像的 letterbox 映射参数 */
+function fitCanvas(cv){
+  if(!cv) return null;
+  const r = cv.getBoundingClientRect();
+  if(r.width < 10) return null;
+  if(cv.width !== Math.round(r.width) || cv.height !== Math.round(r.height)){
+    cv.width = Math.round(r.width);
+    cv.height = Math.round(r.height);
+  }
+  return { W: cv.width, H: cv.height };
+}
+
+/**
+ * 计算 object-fit:contain 下，源图在容器里的实际渲染矩形。
+ * @param {number} W 容器宽
+ * @param {number} H 容器高
+ * @param {number} srcW 源图宽（默认 16:9 = 1280x720）
+ * @param {number} srcH 源图高
+ * @returns {{x:number,y:number,w:number,h:number,scale:number}}
+ */
+function containRect(W, H, srcW, srcH){
+  srcW = srcW || 1280;
+  srcH = srcH || 720;
+  const srcRatio = srcW / srcH;
+  const boxRatio = W / H;
+  let w, h;
+  if(boxRatio > srcRatio){
+    // 容器更宽 -> 高度受限，左右留黑边
+    h = H;
+    w = H * srcRatio;
+  }else{
+    // 容器更高 -> 宽度受限，上下留黑边
+    w = W;
+    h = W / srcRatio;
+  }
+  return { x: (W - w) / 2, y: (H - h) / 2, w, h, scale: w / srcW };
+}
+
+/** 归一化图像坐标 -> 画布像素坐标 */
+function mapPt(nx, ny, rect, mirror){
+  // mirror=true 时 x 轴翻转（与 CSS scaleX(-1) 一致）
+  const mx = mirror ? (1 - nx) : nx;
+  return [rect.x + mx * rect.w, rect.y + ny * rect.h];
+}
+
+/** 画一只手的骨架 —— rect 是图像在画布里的实际渲染矩形 */
+function drawHandOn(ctx, rect, lm, color, inZone, zoneCenterN){
+  const P = lm.map(p => mapPt(p[0], p[1], rect, true));
+
+  // 骨架连线
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 10;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1.8, rect.w / 460);
+  ctx.lineCap = 'round';
+  LM_CONN.forEach(([a,b])=>{
+    ctx.beginPath();
+    ctx.moveTo(P[a][0], P[a][1]);
+    ctx.lineTo(P[b][0], P[b][1]);
+    ctx.stroke();
+  });
+
+  // 关节点
+  ctx.fillStyle = '#ffffff';
+  P.forEach((p,i)=>{
+    ctx.beginPath();
+    ctx.arc(p[0], p[1], i%4===0 ? 3.6 : 2.6, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.restore();
+
+  // 掌心
+  const palmN = [(lm[0][0]+lm[9][0])/2, (lm[0][1]+lm[9][1])/2];
+  const [hx,hy] = mapPt(palmN[0], palmN[1], rect, true);
+
+  ctx.save();
+  ctx.shadowColor = color; ctx.shadowBlur = 16;
+  ctx.strokeStyle = color; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(hx,hy,11,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(hx,hy,4.5,0,Math.PI*2);
+  ctx.fillStyle = color; ctx.fill();
+  ctx.restore();
+
+  // 掌心 -> 零点连线
+  if(inZone && zoneCenterN){
+    const [cx,cy] = mapPt(zoneCenterN[0], zoneCenterN[1], rect, true);
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([6,6]);
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(hx,hy); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/** 人形检测框 */
+function drawPersonBox(ctx, rect, b){
+  if(!b || !b.find || !b.bb) return;
+  const [bx,by,bw,bh] = b.bb;
+  const [ax,ay] = mapPt(bx/1000, by/1000, rect, true);
+  const [bx2,by2] = mapPt((bx+bw)/1000, (by+bh)/1000, rect, true);
+  const x1 = Math.min(ax, bx2), y1 = Math.min(ay, by2);
+  const w = Math.max(Math.abs(bx2-ax), 2), h = Math.max(Math.abs(by2-ay), 2);
+
+  ctx.save();
+  ctx.shadowColor='rgba(0,229,255,.8)'; ctx.shadowBlur=12;
+  ctx.strokeStyle='#00e5ff'; ctx.lineWidth=2.4;
+  ctx.strokeRect(x1,y1,w,h);
+  ctx.restore();
+
+  const cl = Math.min(w,h)*0.15;
+  ctx.save();
+  ctx.strokeStyle='#00e5ff'; ctx.lineWidth=3.4;
+  [[x1,y1,1,1],[x1+w,y1,-1,1],[x1,y1+h,1,-1],[x1+w,y1+h,-1,-1]].forEach(([px,py,sx,sy])=>{
+    ctx.beginPath();
+    ctx.moveTo(px+sx*cl,py); ctx.lineTo(px,py); ctx.lineTo(px,py+sy*cl);
+    ctx.stroke();
+  });
+  ctx.restore();
+
+  const lbl = 'PERSON ' + (b.conf||0).toFixed(2);
+  ctx.save();
+  ctx.font='600 11px "JetBrains Mono",Consolas,monospace';
+  const tw = ctx.measureText(lbl).width+14;
+  const ly = Math.max(y1-24, rect.y+2);
+  ctx.fillStyle='rgba(0,229,255,.94)';
+  ctx.fillRect(x1, ly, tw, 20);
+  ctx.fillStyle='#001218';
+  ctx.fillText(lbl, x1+7, ly+14.5);
+  ctx.restore();
+}
+
+/** 摇杆工作区（归一化坐标直接映射） */
+function drawZone(ctx, rect, zone, centerN, inZone, color){
+  if(!zone) return;
+  // 镜像后坐标会左右颠倒，必须用 min/max 归一化边界
+  const [ax, ay] = mapPt(zone[0], zone[1], rect, true);
+  const [bx, by] = mapPt(zone[2], zone[3], rect, true);
+  const zx1 = Math.min(ax, bx), zx2 = Math.max(ax, bx);
+  const zy1 = Math.min(ay, by), zy2 = Math.max(ay, by);
+  const zw = Math.max(zx2 - zx1, 1), zh = Math.max(zy2 - zy1, 1);
+
+  ctx.save();
+  ctx.strokeStyle = inZone ? 'rgba(0,255,157,.72)' : 'rgba(0,229,255,.26)';
+  ctx.lineWidth = 1.6;
+  ctx.setLineDash([10,7]);
+  ctx.strokeRect(zx1, zy1, zw, zh);
+  ctx.restore();
+
+  if(centerN){
+    const [cx,cy] = mapPt(centerN[0], centerN[1], rect, true);
+    const dr = Math.max(Math.min(zw, zh) * 0.075, 3);   // 保证半径 > 0
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(cx, cy, dr, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx-dr*1.5,cy); ctx.lineTo(cx-dr*.4,cy);
+    ctx.moveTo(cx+dr*.4,cy);  ctx.lineTo(cx+dr*1.5,cy);
+    ctx.moveTo(cx,cy-dr*1.5); ctx.lineTo(cx,cy-dr*.4);
+    ctx.moveTo(cx,cy+dr*.4);  ctx.lineTo(cx,cy+dr*1.5);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, 2.6, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawOverlay(){
+  if(!S) return;
+  const js = S.joysticks || {};
+  const JR = js.right || {};
+  const hands = S.hands || [];
+  const handed = (S.handedness || []).map(x => (x||'').toLowerCase());
+
+  // ══════ 左画面（ov1 在 cam1 内，对应 CAM-2）：手势识别 ══════
+  const m1 = fitCanvas(ov1);
+  try{ if(c1 && m1){
+    c1.clearRect(0, 0, m1.W, m1.H);
+    const rect1 = containRect(m1.W, m1.H);
+
+    drawZone(c1, rect1, JR.zone || [0,0,1,1], JR.center, JR.in_zone,
+             'rgba(0,255,157,.5)');
+
+    for(let i=0;i<hands.length;i++){
+      const nm = handed[i];
+      let col = '#7ee0ff';
+      if(nm === 'right') col = '#00ff9d';
+      else if(nm === 'left') col = '#00e5ff';
+      drawHandOn(c1, rect1, hands[i], col, JR.in_zone, JR.center);
+    }
+
+    c1.save();
+    c1.font = '600 10px "JetBrains Mono",Consolas,monospace';
+    c1.fillStyle = hands.length ? 'rgba(0,255,157,.85)' : 'rgba(90,107,122,.6)';
+    const [tx,ty] = mapPt(0.02, 0.97, rect1, true);
+    c1.fillText(hands.length ? 'HAND TRACKING' : 'NO HAND', tx+5, ty);
+    c1.restore();
+  } }catch(e){ window.__ov1Err = e.message; }
+
+  // ══════ 右画面（ov0 在 cam0 内，对应 CAM-1）：人体识别 ══════
+  const m0 = fitCanvas(ov0);
+  try{ if(c0 && m0){
+    c0.clearRect(0, 0, m0.W, m0.H);
+    const rect0 = containRect(m0.W, m0.H);
+    drawPersonBox(c0, rect0, S.board);
+
+    c0.save();
+    c0.font = '600 10px "JetBrains Mono",Consolas,monospace';
+    const b = S.board || {};
+    c0.fillStyle = b.find ? 'rgba(0,229,255,.85)' : 'rgba(90,107,122,.6)';
+    const [tx,ty] = mapPt(0.02, 0.97, rect0, true);
+    c0.fillText(b.find ? 'PERSON DETECTED' : 'NPU SCANNING...', tx+5, ty);
+    c0.restore();
+  } }catch(e){ window.__ov0Err = e.message; }
+}
+
+/* ═══════════ 摇杆绘制（通用） ═══════════ */
+function drawJoyCanvas(canvasId, js, label){
+  const c = document.getElementById(canvasId);
+  if(!c) return;
+  const g = c.getContext('2d');
+  const W=c.width, H=c.height, cx=W/2, cy=H/2, R=W/2-14;
+  g.clearRect(0,0,W,H);
+
+  js = js || {x:0,y:0,active:false,in_zone:false,estop:false,direction:'STOP'};
+
+  let col = '#1e2a35';
+  if(js.estop) col='#ff2d55';
+  else if(js.direction==='CALIB') col='#ffb300';
+  else if(js.active) col='#00ff9d';
+  else if(js.in_zone) col='#ffb300';
+
+  // 外圈刻度
+  g.save();
+  g.strokeStyle='rgba(0,229,255,.14)'; g.lineWidth=1;
+  for(let i=0;i<24;i++){
+    const a=i*Math.PI/12, r1=R+2, r2=R+(i%6===0?8:4);
+    g.beginPath();
+    g.moveTo(cx+Math.cos(a)*r1, cy+Math.sin(a)*r1);
+    g.lineTo(cx+Math.cos(a)*r2, cy+Math.sin(a)*r2);
+    g.stroke();
+  }
+  g.restore();
+
+  // 主盘
+  const grd=g.createRadialGradient(cx,cy-R*.3,R*.1,cx,cy,R);
+  grd.addColorStop(0,'rgba(14,22,30,.95)');
+  grd.addColorStop(1,'rgba(6,10,15,.98)');
+  g.beginPath(); g.arc(cx,cy,R,0,Math.PI*2);
+  g.fillStyle=grd; g.fill();
+  g.strokeStyle='rgba(0,229,255,.26)'; g.lineWidth=1.4; g.stroke();
+
+  // 内环 + 十字
+  g.beginPath(); g.arc(cx,cy,R*.62,0,Math.PI*2);
+  g.strokeStyle='rgba(0,229,255,.09)'; g.lineWidth=1; g.stroke();
+  g.strokeStyle='rgba(0,229,255,.12)';
+  g.beginPath();
+  g.moveTo(cx-R*.85,cy); g.lineTo(cx+R*.85,cy);
+  g.moveTo(cx,cy-R*.85); g.lineTo(cx,cy+R*.85);
+  g.stroke();
+
+  // 死区
+  const dr=R*.13;
+  g.beginPath(); g.arc(cx,cy,dr,0,Math.PI*2);
+  g.strokeStyle='rgba(0,229,255,.22)'; g.setLineDash([3,3]); g.stroke();
+  g.setLineDash([]);
+
+  // 方向标
+  g.save();
+  g.fillStyle='rgba(90,107,122,.8)';
+  g.font='600 8px "JetBrains Mono",monospace';
+  g.textAlign='center';
+  g.fillText('F', cx, cy-R-6);
+  g.fillText('B', cx, cy+R+12);
+  g.fillText('L', cx-R-8, cy+3);
+  g.fillText('R', cx+R+8, cy+3);
+  g.restore();
+
+  // 手柄
+  const nx=Math.max(-1,Math.min(1,js.x/1000));
+  const ny=Math.max(-1,Math.min(1,js.y/1000));
+  const px=cx+nx*(R-18), py=cy-ny*(R-18);
+
+  if(Math.abs(nx)>0.02||Math.abs(ny)>0.02){
+    g.save();
+    g.strokeStyle=col; g.lineWidth=2.2; g.shadowColor=col; g.shadowBlur=9;
+    g.beginPath(); g.moveTo(cx,cy); g.lineTo(px,py); g.stroke();
+    g.restore();
+  }
+  g.save();
+  g.shadowColor=col; g.shadowBlur=13;
+  g.beginPath(); g.arc(px,py,11,0,Math.PI*2);
+  g.fillStyle=col; g.fill();
+  g.strokeStyle='rgba(255,255,255,.28)'; g.lineWidth=1.2; g.stroke();
+  g.restore();
+}
+
+/* ═══════════ 雷达 ═══════════ */
+let radarA = 0;
+function drawRadar(){
+  const c = document.getElementById('radar');
+  const g = c.getContext('2d');
+  const W=c.width, H=c.height, cx=W/2, cy=H/2, R=W/2-5;
+  g.clearRect(0,0,W,H);
+
+  // 网格
+  g.strokeStyle='rgba(0,229,255,.13)'; g.lineWidth=1;
+  [0.33,0.66,1].forEach(k=>{
+    g.beginPath(); g.arc(cx,cy,R*k,0,Math.PI*2); g.stroke();
+  });
+  g.beginPath();
+  g.moveTo(cx-R,cy); g.lineTo(cx+R,cy);
+  g.moveTo(cx,cy-R); g.lineTo(cx,cy+R);
+  g.stroke();
+
+  // 扫描扇形
+  const grd = g.createConicGradient ? null : null;
+  g.save();
+  g.translate(cx,cy);
+  g.rotate(radarA);
+  const lg = g.createLinearGradient(0,0,R,0);
+  lg.addColorStop(0,'rgba(0,255,157,.42)');
+  lg.addColorStop(1,'rgba(0,255,157,0)');
+  g.beginPath();
+  g.moveTo(0,0);
+  g.arc(0,0,R,-0.5,0);
+  g.closePath();
+  g.fillStyle=lg; g.fill();
+  g.restore();
+
+  // 目标点
+  if(S && S.board.find && S.board.bb){
+    const b=S.board.bb;
+    const px=cx+((b[0]+b[2]/2)/1000-0.5)*R*1.5;
+    const py=cy+((b[1]+b[3]/2)/1000-0.5)*R*1.5;
+    g.save();
+    g.shadowColor='#00e5ff'; g.shadowBlur=11;
+    g.fillStyle='#00e5ff';
+    g.beginPath(); g.arc(px,py,3.4,0,Math.PI*2); g.fill();
+    g.restore();
+  }
+
+  radarA += 0.055;
+  if(radarA>Math.PI*2) radarA -= Math.PI*2;
+}
+
+/* ═══════════ 频谱 ═══════════ */
+const specBars = new Array(48).fill(4);
+function drawSpec(){
+  const c = document.getElementById('spec');
+  const g = c.getContext('2d');
+  const W=c.width, H=c.height;
+  g.clearRect(0,0,W,H);
+
+  // 更新
+  for(let i=0;i<specBars.length;i++){
+    const target = 3 + Math.random()*(S && S.board.connected ? 30 : 12);
+    specBars[i] += (target - specBars[i])*0.3;
+  }
+
+  const bw = W/specBars.length;
+  for(let i=0;i<specBars.length;i++){
+    const h = Math.min(specBars[i], H-3);
+    const x = i*bw;
+    const grd = g.createLinearGradient(0,H,0,H-h);
+    grd.addColorStop(0,'rgba(0,229,255,.85)');
+    grd.addColorStop(.6,'rgba(0,255,157,.7)');
+    grd.addColorStop(1,'rgba(255,179,0,.5)');
+    g.fillStyle=grd;
+    g.fillRect(x+bw*0.18, H-h, bw*0.64, h);
+  }
+}
+
+/* ═══════════ 日志（装饰） ═══════════ */
+const LOGS = [
+  ['cy','NPU tensor alloc / 512x288x4 @0x41b71000'],
+  ['','ISP frame sync ok · pts %T'],
+  ['cy','VPU CH1 -> VOU bind established'],
+  ['','UART rx %N bytes · crc ok'],
+  ['ok','NN inference %F ms · anchors 3549'],
+  ['','NMS threshold 0.45 · kept 1'],
+  ['cy','hand landmarker 21/21 points'],
+  ['','gesture classifier fsm -> IDLE'],
+  ['ok','safety watchdog feed · %T'],
+  ['','ring buffer 8/8 · no drop'],
+  ['cy','JPEG encoder queue %N'],
+  ['','SIGMA filter k=0.35 -> x=%X y=%Y'],
+  ['ok','heartbeat %T'],
+  ['','thermal 62C · freq 1.2G'],
+  ['cy','mem heap 118.4M free'],
+];
+let logCount = 0, logTimes = [];
+
+function pushLog(){
+  const box = document.getElementById('logbox');
+  const l = LOGS[Math.floor(Math.random()*LOGS.length)];
+  const d = new Date();
+  const ts = `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3,'0')}`;
+  let msg = l[1]
+    .replace('%T', ts)
+    .replace('%N', Math.floor(Math.random()*9999))
+    .replace('%F', (Math.random()*3+2).toFixed(2))
+    .replace('%X', (Math.random()*200-100).toFixed(1))
+    .replace('%Y', (Math.random()*100).toFixed(1));
+
+  const div = document.createElement('div');
+  div.className = 'logline';
+  div.innerHTML = `<span class="ts">[${ts}]</span> <span class="${l[0]}">${msg}</span>`;
+  box.appendChild(div);
+
+  while(box.children.length > 40) box.removeChild(box.firstChild);
+
+  logCount++;
+  logTimes.push(Date.now());
+  logTimes = logTimes.filter(t=>Date.now()-t < 1000);
+  document.getElementById('lograte').textContent = logTimes.length + '/s';
+}
+
+/* ═══════════ 轮询后端 ═══════════ */
+async function poll(){
+  const t = performance.now();
+  try{
+    const r = await fetch('/api/state', {cache:'no-store'});
+    S = await r.json();
+    const dt = performance.now()-t;
+    latHist.push(dt);
+    if(latHist.length>20) latHist.shift();
+    update();
+  }catch(e){
+    window.__lastErr = (e && e.stack) ? e.stack.split('\n').slice(0,3).join(' | ') : String(e);
+    console.error('[poll]', e);
+  }
+  setTimeout(poll, 90);
+}
+
+let lastPos = null;
+function update(){
+  if(!S) return;
+  const b = S.board || {};
+
+  const setHTML = (id, v) => { const e=document.getElementById(id); if(e) e.innerHTML=v; };
+  const setTxt  = (id, v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+
+  // ── 指标
+  setHTML('m-cap',  (S.fps.capture||0).toFixed(0)+'<small>fps</small>');
+  setHTML('m-hand', (S.fps.hand||0).toFixed(1)+'<small>fps</small>');
+  setHTML('m-npu',  (b.fps||0).toFixed(1)+'<small>fps</small>');
+  const avgLat = latHist.length ? latHist.reduce((a,c)=>a+c,0)/latHist.length : 0;
+  setHTML('m-lat', avgLat.toFixed(0)+'<small>ms</small>');
+
+  setTxt('tb-npu', (b.fps||0).toFixed(1));
+  setTxt('tb-link', b.connected ? 'OK' : 'LOST');
+  const tbLink = document.getElementById('tb-link');
+  if(tbLink) tbLink.style.color = b.connected ? '#00ff9d' : '#ff2d55';
+  setTxt('f4', 'FPS ' + (b.fps||0).toFixed(1));
+  const f2 = document.getElementById('f2');
+  if(f2) f2.textContent = S.cam1_ok ? 'CAM1=PERSON CAM2=GESTURE' : '单摄模式';
+
+  // ── 单摇杆（用 right 这一路）
+  const J = (S.joysticks && S.joysticks.right) || {};
+
+  drawJoyCanvas('joyR', J, 'JOY');
+
+  const posTxt = (id,v)=>{ const e=document.getElementById(id);
+                           if(e) e.textContent=(v>0?'+':'')+v; };
+  posTxt('rx', J.x||0); posTxt('ry', J.y||0);
+
+  const wrap = document.getElementById('joyR-wrap');
+  const cal = J.cal || {};
+  if(wrap){
+    wrap.className = 'joy-overlay single'
+      + (cal.active ? ' cal' : '')
+      + (J.estop ? ' err' : (J.active ? ' act' : ''));
+  }
+
+  const dirName = {FWD:'前进',BACK:'后退',LEFT:'左转',RIGHT:'右转',
+                   STOP:'停止',ESTOP:'急停',CALIB:'校准中'};
+  setTxt('st-r', dirName[J.direction] || J.direction || 'STOP');
+
+  // ── 校准进度
+  const hint = document.getElementById('calhint');
+  const calBtn = document.getElementById('cal-both');
+  if(cal.active){
+    if(hint){ hint.textContent = '校准中… 已握拳 ' + (cal.count||0) + ' / 3 次'; hint.className='calhint hot'; }
+    if(calBtn) calBtn.classList.add('on');
+  }else{
+    if(hint) hint.className='calhint';
+    if(calBtn) calBtn.classList.remove('on');
+    if(hint){
+      hint.textContent = cal.done
+        ? '校准完成 · 零点已更新（↺ 可重置）'
+        : '点击校准后连续握拳 3 次，平均位置即零点';
+    }
+  }
+  const calR = document.getElementById('cal-r');
+  if(calR) calR.classList.toggle('on', !!cal.active);
+
+  // ── 手势识别
+  const GEST_NAME = {OPEN_PALM:'张开手掌', FIST:'握拳', POINTER:'指向前',
+                     OK:'OK 手势', ONE:'1 指', TWO:'2 指', THREE:'3 指',
+                     HORNS:'6 手势', NONE:'未检测'};
+  const gRaw = S.gesture || 'NONE';
+  const gEl = document.getElementById('gesture-name');
+  if(gEl){
+    gEl.textContent = GEST_NAME[gRaw] || gRaw;
+    let cls = 'gesture-big ';
+    if(gRaw === 'NONE') cls += 'off';
+    else if(gRaw === 'FIST') cls += 'stop';
+    else if(gRaw.startsWith('UNK')) cls += 'unk';
+    else cls += 'on';
+    gEl.className = cls;
+  }
+  const gh = document.getElementById('g-hands');
+  if(gh) gh.textContent = (S.hands||[]).length;
+  const gd = document.getElementById('g-hand');
+  if(gd){
+    const hn = (S.handedness||[]).map(x=>x==='Left'?'左':(x==='Right'?'右':'?'));
+    gd.textContent = hn.length ? hn.join(' + ') : '--';
+  }
+  const gf = document.getElementById('g-fps');
+  if(gf) gf.textContent = (S.fps.hand||0).toFixed(1) + ' fps';
+  const gc = document.getElementById('c-gesture');
+  if(gc) gc.className = 'card' + (gRaw === 'FIST' ? ' err' : (gRaw !== 'NONE' ? ' act' : ''));
+
+  // ── 人形检测
+  const vf = document.getElementById('v-find');
+  if(vf){
+    vf.textContent = b.find ? 'DETECTED' : 'SEARCHING';
+    vf.className = 'v ' + (b.find ? 'ok' : '');
+  }
+  setTxt('v-num', b.num >= 0 ? b.num : '--');
+  const vc = document.getElementById('v-conf');
+  if(vc){
+    vc.textContent = (b.conf||0).toFixed(3);
+    vc.className = 'v ' + (b.conf>0.7?'ok':'');
+  }
+  const vl = document.getElementById('v-link');
+  if(vl){
+    vl.textContent = b.connected ? 'ONLINE' : 'OFFLINE';
+    vl.className = 'v ' + (b.connected ? 'ok' : 'err');
+  }
+  const pc = document.getElementById('c-person');
+  if(pc) pc.className = 'card' + (b.find ? ' act' : '');
+
+  // ── 安全状态
+  const stEl = document.getElementById('status');
+  const stTxt = document.getElementById('status-txt');
+  const rsn = document.getElementById('reason');
+  const safeCard = document.getElementById('c-safe');
+  if(stEl){
+    if(J.estop){
+      stEl.className='status err'; if(stTxt) stTxt.textContent='急停 · EMERGENCY';
+      if(rsn) rsn.textContent='张开手掌触发急停 · 收手恢复';
+      if(safeCard) safeCard.className='card err';
+    }else if(J.active){
+      stEl.className='status ok'; if(stTxt) stTxt.textContent='运行中 · ACTIVE';
+      if(rsn) rsn.textContent = (dirName[J.direction]||'-') + ' · 幅度 ' + (J.magnitude||0);
+      if(safeCard) safeCard.className='card act';
+    }else if(J.in_zone){
+      stEl.className='status warn'; if(stTxt) stTxt.textContent='就绪 · READY';
+      if(rsn) rsn.textContent='手已进入手势画面 · 移动即可控制';
+      if(safeCard) safeCard.className='card warn';
+    }else{
+      stEl.className='status idle'; if(stTxt) stTxt.textContent='待机 · STANDBY';
+      if(rsn) rsn.textContent = (S.hands && S.hands.length) ? '把手伸到 CAM-2 手势画面' : '未检测到手';
+      if(safeCard) safeCard.className='card';
+    }
+  }
+
+  drawOverlay();
+}
+
+
+/* ═══════════ 校准按钮 ═══════════ */
+async function calStart(which){
+  try{ await fetch('/api/calibrate/start/'+which, {method:'POST'}); }catch(e){}
+}
+async function calReset(){
+  try{ await fetch('/api/calibrate/reset/both', {method:'POST'}); }catch(e){}
+}
+const bindCal = (id, fn) => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('click', fn);
+};
+bindCal('cal-both', ()=>calStart('both'));
+bindCal('cal-r', ()=>calStart('right'));
+bindCal('cal-reset', calReset);
+
+
+/* ═══════════ 启动 ═══════════ */
+function resize(){
+  fitCanvas(ov0);
+  fitCanvas(ov1);
+}
+window.addEventListener('resize', resize);
+setTimeout(resize, 500);
+resize();
+poll();
+setInterval(()=>{ try{ pushLog(); }catch(e){} }, 520);
+</script>
+</body>
+</html>
